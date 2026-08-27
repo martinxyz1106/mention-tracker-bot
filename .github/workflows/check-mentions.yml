@@ -1,0 +1,35 @@
+name: Mention Tracker
+
+on:
+  schedule:
+    # 08:00 / 16:00 / 00:00 KST (UTC+9) == 23:00 / 07:00 / 15:00 UTC
+    - cron: '0 7,15,23 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check mentions and notify Slack
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+        run: python scripts/check_mentions.py
+
+      - name: Commit updated state
+        run: |
+          git config user.name "mention-tracker-bot"
+          git config user.email "actions@github.com"
+          git add state.json
+          git diff --cached --quiet || git commit -m "Update notified state"
+          git push
