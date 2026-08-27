@@ -2,8 +2,8 @@ name: Mention Tracker
 
 on:
   schedule:
-    # 10:00 KST (UTC+9) == 01:00 UTC
-    - cron: '0 1 * * *'
+    # 08:00 / 16:00 KST (UTC+9) == 23:00 (전날) / 07:00 UTC
+    - cron: '0 23,7 * * *'
   workflow_dispatch: {}
 
 permissions:

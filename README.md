@@ -15,8 +15,12 @@ GitHub Organization Project(`xyzcorpsoftware` / project #2)에서 특정 사용�
 
 ## 실행 스케줄
 
-`.github/workflows/check-mentions.yml`의 GitHub Actions로 매일 **KST 10:00 (UTC 01:00)** 에 한 번 자동 실행됩니다.
+`.github/workflows/check-mentions.yml`의 GitHub Actions로 매일 **KST 08:00 / 16:00 (UTC 23:00 / 07:00)** 에 자동 실행됩니다.
 Actions 탭에서 `workflow_dispatch`로 수동 실행도 가능합니다.
+
+알림 시각/횟수를 바꾸려면 `check-mentions.yml`의 `cron` 값을 수정하고 커밋/push 하세요. GitHub Actions cron은
+**UTC 기준**이라 KST 시각은 UTC−9시간으로 변환해서 넣어야 합니다. 예: KST 09/14/18시 → UTC로는 0/5/9시이므로
+`cron: '0 0,5,9 * * *'`.
 
 ## 추적 대상 설정
 
