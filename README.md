@@ -59,3 +59,8 @@ python scripts/check_mentions.py
 ## 기타 설정값
 
 - `CLOSED_MENTION_DAYS`: 닫힌 티켓을 알림 대상에서 제외하기까지의 기준 일수 (기본 15일)
+
+## SLACK 봇 추가 방법
+- 에이전트 및 도구 탭 -> Ticket Tracking Bot -Individual
+- 개인 비공개 채널 추가 -> 봇 초대
+- Action에서 Run WorkFlow 실행 
