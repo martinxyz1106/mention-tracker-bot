@@ -33,6 +33,7 @@ query($org: String!, $number: Int!, $cursor: String) {
               title
               url
               state
+              createdAt
               closedAt
               repository { nameWithOwner }
               assignees(first: 20) { nodes { login } }
@@ -42,6 +43,7 @@ query($org: String!, $number: Int!, $cursor: String) {
               title
               url
               state
+              createdAt
               closedAt
               repository { nameWithOwner }
               assignees(first: 20) { nodes { login } }
@@ -200,12 +202,16 @@ def main():
                     "url": content["url"],
                     "reasons": reasons,
                     "is_open": is_open,
+                    "created_at": content["createdAt"],
                 }
             )
 
+    matched.sort(key=lambda m: m["created_at"])
+
     if matched:
         def format_line(m):
-            return f"*<{m['url']}|{m['key']}> {m['title']}* — {', '.join(m['reasons'])}"
+            created_date = m["created_at"][:10]
+            return f"*<{m['url']}|{m['key']}> {m['title']}* ({created_date}) — {', '.join(m['reasons'])}"
 
         sections = []
         open_lines = [format_line(m) for m in matched if m["is_open"]]
