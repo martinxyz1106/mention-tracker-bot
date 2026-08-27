@@ -2,8 +2,9 @@ name: Mention Tracker
 
 on:
   schedule:
-    # 08:00 / 16:00 KST (UTC+9) == 23:00 (전날) / 07:00 UTC
-    - cron: '0 23,7 * * *'
+    # 08:05 / 16:05 KST (UTC+9) == 23:05 (전날) / 07:05 UTC
+    # 정각(0분)은 GitHub Actions 스케줄 부하가 몰려 실행이 드롭되기 쉬워 5분 뒤로 설정
+    - cron: '5 23,7 * * *'
   workflow_dispatch: {}
 
 permissions:
