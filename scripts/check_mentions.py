@@ -3,11 +3,13 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timedelta, timezone
 
 ORG = "xyzcorpsoftware"
 PROJECT_NUMBER = 2
 USERNAME = "martinxyz1106"
 STATE_FILE = os.path.join(os.path.dirname(__file__), "..", "state.json")
+CLOSED_MENTION_DAYS = 15
 
 GH_TOKEN = os.environ["GH_PAT"]
 SLACK_TOKEN = os.environ["SLACK_BOT_TOKEN"]
@@ -30,6 +32,8 @@ query($org: String!, $number: Int!, $cursor: String) {
               number
               title
               url
+              state
+              closedAt
               repository { nameWithOwner }
               assignees(first: 20) { nodes { login } }
             }
@@ -37,6 +41,8 @@ query($org: String!, $number: Int!, $cursor: String) {
               number
               title
               url
+              state
+              closedAt
               repository { nameWithOwner }
               assignees(first: 20) { nodes { login } }
               reviewRequests(first: 20) {
@@ -153,11 +159,18 @@ def main():
     }
     mentioned_by_repo = {repo: fetch_mentioned_numbers(repo) for repo in repos}
 
+    now = datetime.now(timezone.utc)
     matched = []
     for it in items:
         content = it.get("content")
         if not content or content["__typename"] not in ("Issue", "PullRequest"):
             continue
+
+        is_open = content["state"] == "OPEN"
+        if not is_open and content["closedAt"]:
+            closed_at = datetime.fromisoformat(content["closedAt"].replace("Z", "+00:00"))
+            if now - closed_at > timedelta(days=CLOSED_MENTION_DAYS):
+                continue
 
         repo = content["repository"]["nameWithOwner"]
         number = content["number"]
@@ -186,6 +199,7 @@ def main():
                     "title": content["title"],
                     "url": content["url"],
                     "reasons": reasons,
+                    "is_open": is_open,
                 }
             )
 
@@ -194,11 +208,18 @@ def main():
     new_items = [m for m in matched if m["key"] not in notified]
 
     if new_items:
-        lines = [
-            f"*<{m['url']}|{m['key']}> {m['title']}* — {', '.join(m['reasons'])}"
-            for m in new_items
-        ]
-        text = "새로운 관련 티켓이 있습니다:\n" + "\n".join(lines)
+        def format_line(m):
+            return f"*<{m['url']}|{m['key']}> {m['title']}* — {', '.join(m['reasons'])}"
+
+        sections = []
+        open_lines = [format_line(m) for m in new_items if m["is_open"]]
+        closed_lines = [format_line(m) for m in new_items if not m["is_open"]]
+        if open_lines:
+            sections.append("*열린 티켓*\n" + "\n".join(open_lines))
+        if closed_lines:
+            sections.append("*닫힌 티켓*\n" + "\n".join(closed_lines))
+
+        text = "새로운 관련 티켓이 있습니다:\n\n" + "\n\n".join(sections)
         post_to_slack(text)
 
     state["notified"] = sorted(m["key"] for m in matched)
