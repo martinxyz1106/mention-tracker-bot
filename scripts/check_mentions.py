@@ -203,25 +203,22 @@ def main():
                 }
             )
 
-    state = load_state()
-    notified = set(state.get("notified", []))
-    new_items = [m for m in matched if m["key"] not in notified]
-
-    if new_items:
+    if matched:
         def format_line(m):
             return f"*<{m['url']}|{m['key']}> {m['title']}* — {', '.join(m['reasons'])}"
 
         sections = []
-        open_lines = [format_line(m) for m in new_items if m["is_open"]]
-        closed_lines = [format_line(m) for m in new_items if not m["is_open"]]
+        open_lines = [format_line(m) for m in matched if m["is_open"]]
+        closed_lines = [format_line(m) for m in matched if not m["is_open"]]
         if open_lines:
             sections.append("*열린 티켓*\n" + "\n".join(open_lines))
         if closed_lines:
             sections.append("*닫힌 티켓*\n" + "\n".join(closed_lines))
 
-        text = "새로운 관련 티켓이 있습니다:\n\n" + "\n\n".join(sections)
+        text = "관련 티켓이 있습니다:\n\n" + "\n\n".join(sections)
         post_to_slack(text)
 
+    state = load_state()
     state["notified"] = sorted(m["key"] for m in matched)
     save_state(state)
 
