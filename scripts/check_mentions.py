@@ -146,8 +146,6 @@ def current_window_key(now_utc):
         slot = "AM"
     elif kst_now.hour == 16:
         slot = "PM"
-    elif kst_now.hour == 11:  # TEMP TEST: 확인 후 제거 예정
-        slot = "TEST"
     else:
         return None
     return f"{kst_now.date().isoformat()}_{slot}"
