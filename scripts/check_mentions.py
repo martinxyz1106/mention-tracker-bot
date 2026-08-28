@@ -10,6 +10,7 @@ PROJECT_NUMBER = 2
 USERNAME = "martinxyz1106"
 STATE_FILE = os.path.join(os.path.dirname(__file__), "..", "state.json")
 CLOSED_MENTION_DAYS = 15
+KST = timezone(timedelta(hours=9))
 
 GH_TOKEN = os.environ["GH_PAT"]
 SLACK_TOKEN = os.environ["SLACK_BOT_TOKEN"]
@@ -138,6 +139,20 @@ def post_to_slack(text):
         raise RuntimeError(f"Slack API error: {result}")
 
 
+def current_window_key(now_utc):
+    """KST 08시대/16시대 실행 슬롯을 식별하는 키. 그 외 시간이면 None (윈도우 dedup 미적용)."""
+    kst_now = now_utc.astimezone(KST)
+    if kst_now.hour == 8:
+        slot = "AM"
+    elif kst_now.hour == 16:
+        slot = "PM"
+    elif kst_now.hour == 10:  # TEMP TEST: 확인 후 제거 예정
+        slot = "TEST"
+    else:
+        return None
+    return f"{kst_now.date().isoformat()}_{slot}"
+
+
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE) as f:
@@ -152,6 +167,15 @@ def save_state(state):
 
 
 def main():
+    now = datetime.now(timezone.utc)
+    is_scheduled = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+    window_key = current_window_key(now) if is_scheduled else None
+
+    state = load_state()
+    if window_key and state.get("last_window") == window_key:
+        print(f"Window {window_key} already handled, skipping.")
+        return
+
     items = fetch_project_items()
 
     repos = {
@@ -161,7 +185,6 @@ def main():
     }
     mentioned_by_repo = {repo: fetch_mentioned_numbers(repo) for repo in repos}
 
-    now = datetime.now(timezone.utc)
     matched = []
     for it in items:
         content = it.get("content")
@@ -224,7 +247,8 @@ def main():
         text = "관련 티켓이 있습니다:\n\n" + "\n\n".join(sections)
         post_to_slack(text)
 
-    state = load_state()
+    if window_key:
+        state["last_window"] = window_key
     state["notified"] = sorted(m["key"] for m in matched)
     save_state(state)
 
