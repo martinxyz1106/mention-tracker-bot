@@ -10,7 +10,6 @@ PROJECT_NUMBER = 2
 USERNAME = "martinxyz1106"
 STATE_FILE = os.path.join(os.path.dirname(__file__), "..", "state.json")
 CLOSED_MENTION_DAYS = 15
-KST = timezone(timedelta(hours=9))
 
 GH_TOKEN = os.environ["GH_PAT"]
 SLACK_TOKEN = os.environ["SLACK_BOT_TOKEN"]
@@ -38,6 +37,9 @@ query($org: String!, $number: Int!, $cursor: String) {
               closedAt
               repository { nameWithOwner }
               assignees(first: 20) { nodes { login } }
+              timelineItems(itemTypes: [REOPENED_EVENT], last: 1) {
+                nodes { ... on ReopenedEvent { createdAt } }
+              }
             }
             ... on PullRequest {
               number
@@ -50,6 +52,9 @@ query($org: String!, $number: Int!, $cursor: String) {
               assignees(first: 20) { nodes { login } }
               reviewRequests(first: 20) {
                 nodes { requestedReviewer { ... on User { login } } }
+              }
+              timelineItems(itemTypes: [REOPENED_EVENT], last: 1) {
+                nodes { ... on ReopenedEvent { createdAt } }
               }
             }
           }
@@ -139,18 +144,6 @@ def post_to_slack(text):
         raise RuntimeError(f"Slack API error: {result}")
 
 
-def current_window_key(now_utc):
-    """KST 08시대/16시대 실행 슬롯을 식별하는 키. 그 외 시간이면 None (윈도우 dedup 미적용)."""
-    kst_now = now_utc.astimezone(KST)
-    if kst_now.hour == 8:
-        slot = "AM"
-    elif kst_now.hour == 16:
-        slot = "PM"
-    else:
-        return None
-    return f"{kst_now.date().isoformat()}_{slot}"
-
-
 def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE) as f:
@@ -166,13 +159,7 @@ def save_state(state):
 
 def main():
     now = datetime.now(timezone.utc)
-    is_scheduled = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
-    window_key = current_window_key(now) if is_scheduled else None
-
     state = load_state()
-    if window_key and state.get("last_window") == window_key:
-        print(f"Window {window_key} already handled, skipping.")
-        return
 
     items = fetch_project_items()
 
@@ -216,6 +203,16 @@ def main():
             reasons.append("멘션됨")
 
         if reasons:
+            reopen_nodes = content["timelineItems"]["nodes"]
+            reopened_at = reopen_nodes[0]["createdAt"] if reopen_nodes else None
+
+            if not is_open:
+                date_label, date_value = "닫힘", content["closedAt"]
+            elif reopened_at:
+                date_label, date_value = "재오픈", reopened_at
+            else:
+                date_label, date_value = "생성", content["createdAt"]
+
             matched.append(
                 {
                     "key": f"{repo}#{number}",
@@ -224,6 +221,8 @@ def main():
                     "reasons": reasons,
                     "is_open": is_open,
                     "created_at": content["createdAt"],
+                    "date_label": date_label,
+                    "date_value": date_value,
                 }
             )
 
@@ -231,8 +230,8 @@ def main():
 
     if matched:
         def format_line(m):
-            created_date = m["created_at"][:10]
-            return f"*<{m['url']}|{m['key']}> {m['title']}* ({created_date}) — {', '.join(m['reasons'])}"
+            date = m["date_value"][:10]
+            return f"*<{m['url']}|{m['key']}> {m['title']}* ({m['date_label']} {date}) — {', '.join(m['reasons'])}"
 
         sections = []
         open_lines = [format_line(m) for m in matched if m["is_open"]]
@@ -245,8 +244,6 @@ def main():
         text = "관련 티켓이 있습니다:\n\n" + "\n\n".join(sections)
         post_to_slack(text)
 
-    if window_key:
-        state["last_window"] = window_key
     state["notified"] = sorted(m["key"] for m in matched)
     save_state(state)
 

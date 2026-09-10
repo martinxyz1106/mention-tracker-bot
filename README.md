@@ -9,33 +9,24 @@ GitHub Organization Project(`xyzcorpsoftware` / project #2)에서 특정 사용�
   대상 이슈/PR을 찾습니다.
 - 열린 티켓(open)과 닫힌 티켓(closed/merged)을 구분해서 Slack 메시지에 섹션으로 나눠 보여줍니다.
 - 닫힌 티켓 중 **닫힌 지 15일이 지난 것**은 알림 대상에서 제외됩니다. (`CLOSED_MENTION_DAYS` 상수로 조절)
+- 티켓 옆에 표시되는 날짜는 상태에 따라 다릅니다: 열린 티켓은 생성일(`생성`), 닫힌 티켓은 닫힌 날짜(`닫힘`),
+  닫혔다가 다시 열린 티켓은 마지막 재오픈 날짜(`재오픈`)를 보여줍니다.
 - 티켓은 생성일 오름차순(오래된 것부터)으로 정렬되어 표시됩니다.
 - 실행할 때마다 조건에 맞는 티켓을 **매번 다시** Slack으로 보냅니다 (같은 티켓 목록에 대한 중복 알림 방지 로직 없음).
 - 매 실행 결과는 `state.json`의 `notified`에 기록만 되고(참고용), 알림 여부 판단에는 사용하지 않습니다.
-- `state.json`의 `last_window`는 **스케줄(`schedule`) 실행에 한해서** "이 아침/저녁 슬롯을 이미 처리했는지"를 기록합니다.
-  같은 슬롯에서 이미 성공 처리됐으면 이후 재시도는 API 호출 없이 곧바로 스킵합니다 (아래 "실행 스케줄" 참고).
-  `workflow_dispatch` 수동 실행은 이 스킵 로직의 영향을 받지 않고 항상 전체 로직을 실행합니다.
 
 ## 실행 스케줄
 
-`.github/workflows/check-mentions.yml`의 GitHub Actions로 매일 **KST 08:05~08:30 / 16:05~16:30 (UTC 23:05~23:30 / 07:05~07:30)**
-사이에 5분 간격으로 여러 번 자동 실행을 시도합니다. Actions 탭에서 `workflow_dispatch`로 수동 실행도 가능합니다.
+`.github/workflows/check-mentions.yml`의 GitHub Actions로 매일 **KST 09:00 / 17:00 (UTC 00:00 / 08:00)**에
+각각 한 번씩 자동 실행됩니다. Actions 탭에서 `workflow_dispatch`로 수동 실행도 가능합니다.
 
-⚠️ **GitHub Actions의 `schedule` 트리거는 정시 실행을 보장하지 않고, 경우에 따라 아예 드롭될 수 있습니다**
-(공식 문서에 명시된 동작이며, 특히 매시 정각처럼 스케줄이 몰리는 시간대에 발생하기 쉽습니다). 실제로 이 저장소에서도
-`schedule` 트리거로 자동 실행된 이력이 한 번도 없었던 시기가 있었습니다 (신규 레포 생성 직후 첫 스케줄 사이클이
-드롭된 사례, Actions 탭에서 `workflow_dispatch`로 트리거된 실행만 존재했음).
+⚠️ **GitHub Actions의 `schedule` 트리거는 정시 실행을 보장하지 않고, 경우에 따라 드롭되거나 지연될 수 있습니다**
+(공식 문서에 명시된 동작). 실제로 이 저장소의 실행 로그를 확인한 결과 실행 시각이 KST 기준 최대 수 시간까지
+밀리는 경우가 있었습니다. 재시도/dedup 로직 없이 시간당 단발 cron만 사용하므로, 해당 회차가 드롭되면 그 알림은
+그대로 누락됩니다 (의도적으로 단순화한 트레이드오프).
 
-이를 완화하기 위해 **하나의 시간대(08시/16시)에 여러 번(5분 간격) cron을 걸어두고**, `scripts/check_mentions.py`에서
-KST 기준 "오늘 아침/저녁 슬롯"을 계산해 이미 그 슬롯에서 성공 처리됐으면 스킵하도록 만들었습니다
-(`current_window_key`, `state.json`의 `last_window`). 즉 5번의 시도 중 하나만 성공해도 그 시간대 알림은 정상적으로
-나가고, 나머지 시도는 조용히 스킵됩니다. 새 토큰 발급이나 외부 크론 서비스 없이 GitHub Actions 안에서만 해결하는 방식입니다.
-
-알림 시각/횟수를 바꾸려면 `check-mentions.yml`의 `cron` 값과 `scripts/check_mentions.py`의 `current_window_key`
-함수(어느 KST 시각을 "AM"/"PM" 슬롯으로 볼지)를 함께 수정하고 커밋/push 하세요. GitHub Actions cron은 **UTC 기준**이라
-KST 시각은 UTC−9시간으로 변환해서 넣어야 합니다.
-
-⚠️ 분(minute) 값에 **정각(0분)은 포함하지 마세요.** 매시 정각은 GitHub Actions 스케줄 부하가 몰려 특히 드롭되기 쉽습니다.
+알림 시각을 바꾸려면 `check-mentions.yml`의 `cron` 값만 수정하고 커밋/push 하세요. GitHub Actions cron은
+**UTC 기준**이라 KST 시각은 UTC−9시간으로 변환해서 넣어야 합니다.
 
 ## 추적 대상 설정
 
