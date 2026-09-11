@@ -6,6 +6,10 @@ on:
     - cron: '0 0,8 * * *'
   workflow_dispatch: {}
 
+concurrency:
+  group: mention-tracker
+  cancel-in-progress: false
+
 permissions:
   contents: write
 

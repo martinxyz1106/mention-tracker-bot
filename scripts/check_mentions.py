@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -66,24 +67,39 @@ query($org: String!, $number: Int!, $cursor: String) {
 """
 
 
+SECONDARY_RATE_LIMIT_RETRIES = 3
+SECONDARY_RATE_LIMIT_DEFAULT_WAIT = 60
+
+
+def _urlopen_with_retry(build_request, url):
+    for attempt in range(SECONDARY_RATE_LIMIT_RETRIES + 1):
+        req = build_request()
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return json.load(resp)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            is_secondary_rate_limit = e.code == 403 and "secondary rate limit" in body.lower()
+            if is_secondary_rate_limit and attempt < SECONDARY_RATE_LIMIT_RETRIES:
+                wait = int(e.headers.get("Retry-After", SECONDARY_RATE_LIMIT_DEFAULT_WAIT))
+                print(
+                    f"Secondary rate limit hit for {url}, retrying in {wait}s "
+                    f"({attempt + 1}/{SECONDARY_RATE_LIMIT_RETRIES})"
+                )
+                time.sleep(wait)
+                continue
+            raise RuntimeError(f"{req.get_method()} {url} failed: {e.code} {body}") from e
+
+
 def http_post_json(url, payload, headers):
-    req = urllib.request.Request(
-        url, data=json.dumps(payload).encode(), headers=headers, method="POST"
+    data = json.dumps(payload).encode()
+    return _urlopen_with_retry(
+        lambda: urllib.request.Request(url, data=data, headers=headers, method="POST"), url
     )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return json.load(resp)
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"POST {url} failed: {e.code} {e.read().decode()}") from e
 
 
 def http_get_json(url, headers):
-    req = urllib.request.Request(url, headers=headers)
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return json.load(resp)
-    except urllib.error.HTTPError as e:
-        raise RuntimeError(f"GET {url} failed: {e.code} {e.read().decode()}") from e
+    return _urlopen_with_retry(lambda: urllib.request.Request(url, headers=headers), url)
 
 
 def gh_graphql(variables):
